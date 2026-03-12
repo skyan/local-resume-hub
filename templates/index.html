@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <style>
+      :root {
+        --bg: #f3f7f8;
+        --card: #ffffff;
+        --ink: #132a3a;
+        --accent: #1f7a8c;
+        --muted: #5f6f7a;
+      }
+      body {
+        margin: 0;
+        font-family: "PingFang SC", "Noto Sans SC", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(circle at top right, #e0f1f5, var(--bg));
+      }
+      .wrap {
+        max-width: 1200px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+      .panel {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+        margin-bottom: 16px;
+      }
+      .title {
+        margin: 0 0 8px;
+      }
+      .sub {
+        margin: 0;
+        color: var(--muted);
+      }
+      .progress-wrap {
+        margin-top: 10px;
+      }
+      .progress-line {
+        width: 100%;
+        height: 10px;
+        background: #dce8ec;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #1f7a8c, #2ca58d);
+        transition: width 0.3s ease;
+      }
+      .progress-text {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+      }
+      input, select, button {
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid #d4dee3;
+        padding: 0 10px;
+        font-size: 14px;
+      }
+      button {
+        border: 0;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        border-bottom: 1px solid #e8eef1;
+        padding: 10px 8px;
+        font-size: 14px;
+      }
+      th.col-name, td.col-name {
+        min-width: 120px;
+        width: 120px;
+        white-space: nowrap;
+      }
+      th.col-position, td.col-position {
+        min-width: 260px;
+        width: 260px;
+        white-space: nowrap;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .sort-btn {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        height: auto;
+        cursor: pointer;
+        font: inherit;
+      }
+      .meta {
+        margin-top: 8px;
+        color: var(--muted);
+      }
+      .pager {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .pager button {
+        height: 32px;
+        padding: 0 12px;
+      }
+      .pager-info {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .file-link {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #e3f2f4;
+        color: #0d5563;
+        text-decoration: none;
+        font-size: 12px;
+      }
+      .detail-col {
+        display: none;
+      }
+      .show-details .detail-col {
+        display: table-cell;
+      }
+      @media (max-width: 700px) {
+        th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h2 class="title">{{ title }}</h2>
+        <p class="sub">监听目录：{{ resume_root }}</p>
+        <div class="progress-wrap">
+          <div class="progress-line">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+          <p id="progress-text" class="progress-text">扫描进度：加载中...</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <form id="filters">
+          <input name="q" placeholder="关键词（姓名/岗位/技能）" />
+          <input name="name" placeholder="姓名" />
+          <select name="position" id="position-select">
+            <option value="">全部岗位</option>
+          </select>
+          <input type="date" name="date_from" />
+          <input type="date" name="date_to" />
+          <select name="sort_by">
+            <option value="created_at">入库时间</option>
+            <option value="name">姓名</option>
+            <option value="position">岗位</option>
+          </select>
+          <select name="order">
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+          <button type="submit">查询</button>
+          <button type="button" id="rescan">补扫</button>
+          <button type="button" id="toggle-details">显示解析详情</button>
+        </form>
+      </div>
+
+      <div class="panel" id="table-panel">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-name">姓名</th>
+              <th class="col-position">岗位</th>
+              <th><button type="button" id="sort-time" class="sort-btn">入库时间</button></th>
+              <th>电话</th>
+              <th>邮箱</th>
+              <th>技能</th>
+              <th>简历文件</th>
+              <th class="detail-col">解析详情</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p class="meta" id="meta"></p>
+        <div class="pager">
+          <button type="button" id="page-first">首页</button>
+          <button type="button" id="page-prev">上一页</button>
+          <button type="button" id="page-next">下一页</button>
+          <span id="pager-info" class="pager-info">第 1 页</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const rows = document.getElementById("rows");
+      const meta = document.getElementById("meta");
+      const form = document.getElementById("filters");
+      const sortTimeBtn = document.getElementById("sort-time");
+      const tablePanel = document.getElementById("table-panel");
+      const progressFill = document.getElementById("progress-fill");
+      const progressText = document.getElementById("progress-text");
+      const toggleDetailsBtn = document.getElementById("toggle-details");
+      const positionSelect = document.getElementById("position-select");
+      const btnFirst = document.getElementById("page-first");
+      const btnPrev = document.getElementById("page-prev");
+      const btnNext = document.getElementById("page-next");
+      const pagerInfo = document.getElementById("pager-info");
+      let showDetails = false;
+      let currentPage = 1;
+      const pageSize = 30;
+      let totalPages = 1;
+
+      function formatTime(ts) {
+        if (!ts) return "-";
+        return new Date(ts * 1000).toLocaleString();
+      }
+
+      async function load(page = 1) {
+        const fd = new FormData(form);
+        const params = new URLSearchParams();
+        for (const [k, v] of fd.entries()) {
+          if (v) params.set(k, v);
+        }
+        params.set("page", page);
+        params.set("page_size", pageSize);
+
+        const res = await fetch(`/api/candidates?${params.toString()}`);
+        const data = await res.json();
+        currentPage = data.page || page;
+        totalPages = Math.max(1, Math.ceil((data.total || 0) / pageSize));
+
+        rows.innerHTML = "";
+        for (const it of data.items) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="col-name">${it.name || "-"}</td>
+            <td class="col-position">${it.applied_position || "-"}</td>
+            <td>${formatTime(it.file_mtime)}</td>
+            <td>${it.phone || "-"}</td>
+            <td>${it.email || "-"}</td>
+            <td>${it.skills || "-"}</td>
+            <td><a class="file-link" href="/api/candidates/${it.id}/file" target="_blank" rel="noopener noreferrer">预览</a></td>
+            <td class="detail-col">${it.parse_detail || "-"}</td>
+          `;
+          rows.appendChild(tr);
+        }
+        meta.textContent = `总数 ${data.total} 条，当前第 ${data.page} 页，排序 ${data.sort_by} ${data.order}`;
+        pagerInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+        btnFirst.disabled = currentPage <= 1;
+        btnPrev.disabled = currentPage <= 1;
+        btnNext.disabled = currentPage >= totalPages;
+
+        const currentSort = form.elements["sort_by"].value;
+        const currentOrder = form.elements["order"].value;
+        if (currentSort === "created_at") {
+          sortTimeBtn.textContent = currentOrder === "asc" ? "入库时间 ▲" : "入库时间 ▼";
+        } else {
+          sortTimeBtn.textContent = "入库时间";
+        }
+      }
+
+      async function loadProgress() {
+        try {
+          const res = await fetch("/api/progress");
+          const p = await res.json();
+          const pct = Number(p.percentage || 0);
+          progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+          progressText.textContent = `扫描进度：${p.indexed_files}/${p.total_files}（${pct.toFixed(2)}%），待处理 ${p.pending_files}`;
+        } catch (_) {
+          progressText.textContent = "扫描进度：加载失败";
+        }
+      }
+
+      async function loadPositions() {
+        try {
+          const res = await fetch("/api/positions");
+          const data = await res.json();
+          const current = positionSelect.value;
+          positionSelect.innerHTML = '<option value="">全部岗位</option>';
+          for (const p of data.items || []) {
+            const opt = document.createElement("option");
+            opt.value = p;
+            opt.textContent = p;
+            positionSelect.appendChild(opt);
+          }
+          if (current) {
+            positionSelect.value = current;
+          }
+        } catch (_) {}
+      }
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        load(1);
+      });
+
+      document.getElementById("rescan").addEventListener("click", async () => {
+        await fetch("/api/rescan", { method: "POST" });
+        setTimeout(() => {
+          load(1);
+          loadProgress();
+        }, 1200);
+      });
+
+      sortTimeBtn.addEventListener("click", () => {
+        const sortBy = form.elements["sort_by"];
+        const order = form.elements["order"];
+        if (sortBy.value === "created_at") {
+          order.value = order.value === "desc" ? "asc" : "desc";
+        } else {
+          sortBy.value = "created_at";
+          order.value = "desc";
+        }
+        load(1);
+      });
+
+      toggleDetailsBtn.addEventListener("click", () => {
+        showDetails = !showDetails;
+        tablePanel.classList.toggle("show-details", showDetails);
+        toggleDetailsBtn.textContent = showDetails ? "隐藏解析详情" : "显示解析详情";
+      });
+
+      btnFirst.addEventListener("click", () => {
+        if (currentPage > 1) {
+          load(1);
+        }
+      });
+
+      btnPrev.addEventListener("click", () => {
+        if (currentPage > 1) {
+          load(currentPage - 1);
+        }
+      });
+
+      btnNext.addEventListener("click", () => {
+        if (currentPage < totalPages) {
+          load(currentPage + 1);
+        }
+      });
+
+      load(1);
+      loadPositions();
+      loadProgress();
+      setInterval(loadProgress, 5000);
+    </script>
+  </body>
+</html>
