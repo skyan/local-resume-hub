@@ -290,3 +290,74 @@ class Database:
                 """
             ).fetchall()
             return [str(r["applied_position"]) for r in rows]
+
+    def list_candidate_files_by_ids(self, candidate_ids: list[int]) -> list[dict[str, Any]]:
+        if not candidate_ids:
+            return []
+
+        placeholders = ",".join(["?"] * len(candidate_ids))
+        sql = f"""
+            SELECT
+                c.id AS candidate_id,
+                c.name,
+                c.applied_position,
+                rf.file_path
+            FROM candidates c
+            JOIN resume_files rf ON c.resume_file_id = rf.id
+            WHERE c.id IN ({placeholders})
+        """
+        with self.connect() as conn:
+            rows = conn.execute(sql, candidate_ids).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_candidate_fields(self, candidate_id: int, fields: dict[str, str | None]) -> bool:
+        allowed = {
+            "name",
+            "phone",
+            "email",
+            "education",
+            "years_experience",
+            "skills",
+            "applied_position",
+        }
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+
+        set_sql = ", ".join([f"{k} = ?" for k in updates.keys()])
+        args: list[Any] = list(updates.values())
+        args.append(candidate_id)
+
+        with self.connect() as conn:
+            cur = conn.execute(
+                f"UPDATE candidates SET {set_sql} WHERE id = ?",
+                args,
+            )
+            return cur.rowcount > 0
+
+    def delete_candidate_and_resume(self, candidate_id: int) -> dict[str, Any] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT c.id, c.resume_file_id, rf.file_path
+                FROM candidates c
+                JOIN resume_files rf ON c.resume_file_id = rf.id
+                WHERE c.id = ?
+                LIMIT 1
+                """,
+                (candidate_id,),
+            ).fetchone()
+            if not row:
+                return None
+
+            resume_file_id = int(row["resume_file_id"])
+            file_path = str(row["file_path"])
+
+            conn.execute("DELETE FROM candidates WHERE id = ?", (candidate_id,))
+            conn.execute("DELETE FROM resume_files WHERE id = ?", (resume_file_id,))
+
+            return {
+                "candidate_id": int(row["id"]),
+                "resume_file_id": resume_file_id,
+                "file_path": file_path,
+            }

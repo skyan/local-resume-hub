@@ -58,6 +58,17 @@
         font-size: 13px;
         color: var(--muted);
       }
+      .export-panel {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: 10px;
+        align-items: center;
+      }
+      .export-note {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
       form {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -85,6 +96,10 @@
         border-bottom: 1px solid #e8eef1;
         padding: 10px 8px;
         font-size: 14px;
+      }
+      th.col-check, td.col-check {
+        width: 48px;
+        min-width: 48px;
       }
       th.col-name, td.col-name {
         min-width: 120px;
@@ -143,9 +158,78 @@
       .show-details .detail-col {
         display: table-cell;
       }
+      .edit-col {
+        display: none;
+      }
+      .show-edit .edit-col {
+        display: table-cell;
+      }
+      .op-btn {
+        margin-right: 6px;
+        border: 0;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .op-edit {
+        background: #e3f2f4;
+        color: #0d5563;
+      }
+      .op-delete {
+        background: #ffe4e8;
+        color: #b42318;
+      }
+      .editor-row td {
+        background: #f8fbfc;
+      }
+      .editor-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(160px, 1fr));
+        gap: 8px;
+        align-items: end;
+      }
+      .editor-grid label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .editor-grid input {
+        height: 32px;
+        border-radius: 6px;
+        border: 1px solid #d4dee3;
+        padding: 0 8px;
+        font-size: 13px;
+      }
+      .editor-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .editor-save {
+        background: #1f7a8c;
+        color: #fff;
+      }
+      .editor-cancel {
+        background: #dfe8ec;
+        color: #1d3845;
+      }
+      .status-ok {
+        color: #1a7f37;
+      }
+      .status-err {
+        color: #b42318;
+      }
       @media (max-width: 700px) {
         th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) {
           display: none;
+        }
+        .export-panel {
+          grid-template-columns: 1fr;
+        }
+        .editor-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -184,13 +268,25 @@
           <button type="submit">查询</button>
           <button type="button" id="rescan">补扫</button>
           <button type="button" id="toggle-details">显示解析详情</button>
+          <button type="button" id="toggle-edit">显示编辑</button>
         </form>
+      </div>
+
+      <div class="panel">
+        <div class="export-panel">
+          <input id="target-dir" placeholder="导出目录（绝对路径）" />
+          <button type="button" id="pick-dir">选择目录</button>
+          <button type="button" id="export-selected">导出已勾选</button>
+          <button type="button" id="open-dir">打开目录</button>
+        </div>
+        <p id="export-status" class="export-note">已勾选 0 条。复制时文件名保持不变，若同名则覆盖。</p>
       </div>
 
       <div class="panel" id="table-panel">
         <table>
           <thead>
             <tr>
+              <th class="col-check"><input type="checkbox" id="select-page" /></th>
               <th class="col-name">姓名</th>
               <th class="col-position">岗位</th>
               <th><button type="button" id="sort-time" class="sort-btn">入库时间</button></th>
@@ -199,6 +295,7 @@
               <th>技能</th>
               <th>简历文件</th>
               <th class="detail-col">解析详情</th>
+              <th class="edit-col">编辑</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -222,15 +319,28 @@
       const progressFill = document.getElementById("progress-fill");
       const progressText = document.getElementById("progress-text");
       const toggleDetailsBtn = document.getElementById("toggle-details");
+      const toggleEditBtn = document.getElementById("toggle-edit");
       const positionSelect = document.getElementById("position-select");
       const btnFirst = document.getElementById("page-first");
       const btnPrev = document.getElementById("page-prev");
       const btnNext = document.getElementById("page-next");
       const pagerInfo = document.getElementById("pager-info");
+      const targetDirInput = document.getElementById("target-dir");
+      const pickDirBtn = document.getElementById("pick-dir");
+      const openDirBtn = document.getElementById("open-dir");
+      const exportBtn = document.getElementById("export-selected");
+      const exportStatus = document.getElementById("export-status");
+      const selectPage = document.getElementById("select-page");
       let showDetails = false;
+      let showEdit = false;
       let currentPage = 1;
       const pageSize = 30;
       let totalPages = 1;
+      let selectedIds = new Set();
+      let currentPageIds = [];
+      let validatedTargetDir = "";
+      let currentItemsById = {};
+      let editingId = null;
 
       function formatTime(ts) {
         if (!ts) return "-";
@@ -252,9 +362,16 @@
         totalPages = Math.max(1, Math.ceil((data.total || 0) / pageSize));
 
         rows.innerHTML = "";
+        currentPageIds = [];
+        currentItemsById = {};
+        editingId = null;
         for (const it of data.items) {
+          currentPageIds.push(it.id);
+          currentItemsById[it.id] = it;
+          const checked = selectedIds.has(it.id) ? "checked" : "";
           const tr = document.createElement("tr");
           tr.innerHTML = `
+            <td class="col-check"><input type="checkbox" class="pick-row" data-id="${it.id}" ${checked} /></td>
             <td class="col-name">${it.name || "-"}</td>
             <td class="col-position">${it.applied_position || "-"}</td>
             <td>${formatTime(it.file_mtime)}</td>
@@ -263,6 +380,10 @@
             <td>${it.skills || "-"}</td>
             <td><a class="file-link" href="/api/candidates/${it.id}/file" target="_blank" rel="noopener noreferrer">预览</a></td>
             <td class="detail-col">${it.parse_detail || "-"}</td>
+            <td class="edit-col">
+              <button type="button" class="op-btn op-edit row-edit" data-id="${it.id}">编辑</button>
+              <button type="button" class="op-btn op-delete row-delete" data-id="${it.id}">删除</button>
+            </td>
           `;
           rows.appendChild(tr);
         }
@@ -271,6 +392,10 @@
         btnFirst.disabled = currentPage <= 1;
         btnPrev.disabled = currentPage <= 1;
         btnNext.disabled = currentPage >= totalPages;
+        syncSelectAllState();
+        bindRowSelectors();
+        bindRowOperations();
+        renderExportStatus();
 
         const currentSort = form.elements["sort_by"].value;
         const currentOrder = form.elements["order"].value;
@@ -279,6 +404,152 @@
         } else {
           sortTimeBtn.textContent = "入库时间";
         }
+      }
+
+      function bindRowSelectors() {
+        document.querySelectorAll(".pick-row").forEach((el) => {
+          el.addEventListener("change", (e) => {
+            const id = Number(e.target.dataset.id);
+            if (e.target.checked) {
+              selectedIds.add(id);
+            } else {
+              selectedIds.delete(id);
+            }
+            syncSelectAllState();
+            renderExportStatus();
+          });
+        });
+      }
+
+      function syncSelectAllState() {
+        if (!currentPageIds.length) {
+          selectPage.checked = false;
+          selectPage.indeterminate = false;
+          return;
+        }
+        let checkedCount = 0;
+        for (const id of currentPageIds) {
+          if (selectedIds.has(id)) checkedCount += 1;
+        }
+        selectPage.checked = checkedCount === currentPageIds.length;
+        selectPage.indeterminate = checkedCount > 0 && checkedCount < currentPageIds.length;
+      }
+
+      function renderExportStatus(message = "") {
+        if (message) {
+          exportStatus.textContent = message;
+        } else {
+          exportStatus.textContent = `已勾选 ${selectedIds.size} 条。复制时文件名保持不变，若同名则覆盖。`;
+        }
+      }
+
+      function bindRowOperations() {
+        document.querySelectorAll(".row-delete").forEach((el) => {
+          el.addEventListener("click", async (e) => {
+            const id = Number(e.target.dataset.id);
+            if (!confirm("确认删除该候选人？将同时删除简历文件和索引。")) return;
+            const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+              selectedIds.delete(id);
+              renderExportStatus(`删除成功：candidate ${id}`);
+              exportStatus.className = "export-note status-ok";
+              load(currentPage);
+            } else {
+              renderExportStatus(`删除失败：${data.detail || data.file_error || "unknown"}`);
+              exportStatus.className = "export-note status-err";
+            }
+          });
+        });
+
+        document.querySelectorAll(".row-edit").forEach((el) => {
+          el.addEventListener("click", async (e) => {
+            const id = Number(e.target.dataset.id);
+            const item = currentItemsById[id];
+            if (!item) return;
+            toggleInlineEditor(id, item);
+          });
+        });
+      }
+
+      function removeInlineEditor() {
+        const exists = document.getElementById("inline-editor-row");
+        if (exists) exists.remove();
+        editingId = null;
+      }
+
+      function toggleInlineEditor(id, item) {
+        if (editingId === id) {
+          removeInlineEditor();
+          return;
+        }
+        removeInlineEditor();
+
+        const baseRow = document.querySelector(`.row-edit[data-id="${id}"]`)?.closest("tr");
+        if (!baseRow) return;
+
+        const colCount = baseRow.children.length;
+        const tr = document.createElement("tr");
+        tr.id = "inline-editor-row";
+        tr.className = "editor-row";
+        tr.innerHTML = `
+          <td colspan="${colCount}">
+            <div class="editor-grid">
+              <label>姓名<input id="edit-name" value="${escapeHtml(item.name || "")}" /></label>
+              <label>电话<input id="edit-phone" value="${escapeHtml(item.phone || "")}" /></label>
+              <label>邮箱<input id="edit-email" value="${escapeHtml(item.email || "")}" /></label>
+              <label>学历<input id="edit-education" value="${escapeHtml(item.education || "")}" /></label>
+              <label>工作年限<input id="edit-years" value="${escapeHtml(item.years_experience || "")}" /></label>
+              <label>技能<input id="edit-skills" value="${escapeHtml(item.skills || "")}" /></label>
+              <label>岗位<input id="edit-position" value="${escapeHtml(item.applied_position || "")}" /></label>
+              <div class="editor-actions">
+                <button type="button" class="op-btn editor-save" id="editor-save-btn">保存</button>
+                <button type="button" class="op-btn editor-cancel" id="editor-cancel-btn">取消</button>
+              </div>
+            </div>
+          </td>
+        `;
+        baseRow.insertAdjacentElement("afterend", tr);
+        editingId = id;
+
+        document.getElementById("editor-cancel-btn").addEventListener("click", () => {
+          removeInlineEditor();
+        });
+        document.getElementById("editor-save-btn").addEventListener("click", async () => {
+          const payload = {
+            name: document.getElementById("edit-name").value.trim(),
+            phone: document.getElementById("edit-phone").value.trim(),
+            email: document.getElementById("edit-email").value.trim(),
+            education: document.getElementById("edit-education").value.trim(),
+            years_experience: document.getElementById("edit-years").value.trim(),
+            skills: document.getElementById("edit-skills").value.trim(),
+            applied_position: document.getElementById("edit-position").value.trim(),
+          };
+
+          const res = await fetch(`/api/candidates/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            renderExportStatus(`编辑成功：candidate ${id}`);
+            exportStatus.className = "export-note status-ok";
+            await load(currentPage);
+          } else {
+            renderExportStatus(`编辑失败：${data.detail || "unknown"}`);
+            exportStatus.className = "export-note status-err";
+          }
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
       }
 
       async function loadProgress() {
@@ -311,6 +582,90 @@
         } catch (_) {}
       }
 
+      async function validateTargetDir() {
+        const targetDir = targetDirInput.value.trim();
+        if (!targetDir) {
+          validatedTargetDir = "";
+          renderExportStatus("请先填写导出目录绝对路径");
+          exportStatus.className = "export-note status-err";
+          return false;
+        }
+        const res = await fetch("/api/validate-dir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_dir: targetDir }),
+        });
+        const data = await res.json();
+        if (data.ok && data.writable) {
+          validatedTargetDir = data.resolved_path || targetDir;
+          renderExportStatus(`目录可用：${validatedTargetDir}`);
+          exportStatus.className = "export-note status-ok";
+          return true;
+        }
+        validatedTargetDir = "";
+        renderExportStatus(`目录不可用：${data.reason || "unknown"}`);
+        exportStatus.className = "export-note status-err";
+        return false;
+      }
+
+      async function pickTargetDir() {
+        const res = await fetch("/api/pick-target-dir", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.ok && data.picked && data.target_dir) {
+          targetDirInput.value = data.target_dir;
+          validatedTargetDir = "";
+          renderExportStatus(`已选择目录：${data.target_dir}`);
+          exportStatus.className = "export-note status-ok";
+          return;
+        }
+        renderExportStatus(`选择目录失败：${data.reason || data.detail || "unknown"}`);
+        exportStatus.className = "export-note status-err";
+      }
+
+      async function exportSelected() {
+        if (selectedIds.size === 0) {
+          renderExportStatus("请先勾选至少一条候选人");
+          exportStatus.className = "export-note status-err";
+          return;
+        }
+        const ok = await validateTargetDir();
+        if (!ok) return;
+
+        const ids = Array.from(selectedIds.values());
+        const res = await fetch("/api/export-resumes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidate_ids: ids, target_dir: validatedTargetDir }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          renderExportStatus(`导出失败：${data.detail || "unknown"}`);
+          exportStatus.className = "export-note status-err";
+          return;
+        }
+
+        renderExportStatus(`导出完成：成功 ${data.success}，失败 ${data.failed}，目录 ${data.target_dir}`);
+        exportStatus.className = data.failed > 0 ? "export-note status-err" : "export-note status-ok";
+      }
+
+      async function openTargetDir() {
+        const ok = await validateTargetDir();
+        if (!ok) return;
+        const res = await fetch("/api/open-target-dir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_dir: validatedTargetDir }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok && data.opened) {
+          renderExportStatus(`已在 Finder 打开：${validatedTargetDir}`);
+          exportStatus.className = "export-note status-ok";
+        } else {
+          renderExportStatus(`打开失败：${data.reason || data.detail || "unknown"}`);
+          exportStatus.className = "export-note status-err";
+        }
+      }
+
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         load(1);
@@ -322,6 +677,19 @@
           load(1);
           loadProgress();
         }, 1200);
+      });
+
+      selectPage.addEventListener("change", () => {
+        const checked = selectPage.checked;
+        for (const id of currentPageIds) {
+          if (checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+        }
+        document.querySelectorAll(".pick-row").forEach((el) => {
+          el.checked = checked;
+        });
+        syncSelectAllState();
+        renderExportStatus();
       });
 
       sortTimeBtn.addEventListener("click", () => {
@@ -342,6 +710,12 @@
         toggleDetailsBtn.textContent = showDetails ? "隐藏解析详情" : "显示解析详情";
       });
 
+      toggleEditBtn.addEventListener("click", () => {
+        showEdit = !showEdit;
+        tablePanel.classList.toggle("show-edit", showEdit);
+        toggleEditBtn.textContent = showEdit ? "隐藏编辑" : "显示编辑";
+      });
+
       btnFirst.addEventListener("click", () => {
         if (currentPage > 1) {
           load(1);
@@ -359,6 +733,10 @@
           load(currentPage + 1);
         }
       });
+
+      pickDirBtn.addEventListener("click", pickTargetDir);
+      exportBtn.addEventListener("click", exportSelected);
+      openDirBtn.addEventListener("click", openTargetDir);
 
       load(1);
       loadPositions();

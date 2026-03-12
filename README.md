@@ -13,6 +13,9 @@
 - SQLite 本地存储（按文件哈希去重）
 - Web 查询（排序、分页、岗位下拉筛选、进度展示）
 - 解析详情列（可隐藏/展示）
+- 勾选候选人批量导出（复制到目标目录，文件名保持不变）
+- 一键在 Finder 打开目标目录（macOS）
+- 编辑模式：支持候选人信息编辑与“删除文件+索引”
 - 服务运维脚本（保活、重启、状态、清库重刷）
 
 ## 运行环境
@@ -72,8 +75,14 @@ cp .env.example .env
 - `GET /api/positions`
 - `GET /api/candidates`
 - `GET /api/candidates/{id}`
+- `PUT /api/candidates/{id}`
+- `DELETE /api/candidates/{id}`
 - `GET /api/candidates/{id}/file`（浏览器预览）
 - `POST /api/rescan`
+- `POST /api/validate-dir`
+- `POST /api/export-resumes`
+- `POST /api/open-target-dir`
+- `POST /api/pick-target-dir`（弹出 Finder 选择目录，macOS）
 
 ## 项目结构
 
