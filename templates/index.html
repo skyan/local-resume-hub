@@ -443,6 +443,13 @@
         }
       }
 
+      function clearSelectionState() {
+        selectedIds.clear();
+        selectPage.checked = false;
+        selectPage.indeterminate = false;
+        renderExportStatus();
+      }
+
       function bindRowOperations() {
         document.querySelectorAll(".row-delete").forEach((el) => {
           el.addEventListener("click", async (e) => {
@@ -668,11 +675,13 @@
 
       form.addEventListener("submit", (e) => {
         e.preventDefault();
+        clearSelectionState();
         load(1);
       });
 
       document.getElementById("rescan").addEventListener("click", async () => {
         await fetch("/api/rescan", { method: "POST" });
+        clearSelectionState();
         setTimeout(() => {
           load(1);
           loadProgress();
@@ -701,6 +710,7 @@
           sortBy.value = "created_at";
           order.value = "desc";
         }
+        clearSelectionState();
         load(1);
       });
 
