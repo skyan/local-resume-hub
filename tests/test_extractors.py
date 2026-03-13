@@ -1,4 +1,4 @@
-from app.extractors import extract_candidate_info, extract_position_from_filename
+from app.extractors import CandidateInfo, extract_candidate_info, extract_position_from_filename, merge_candidate_info
 
 
 def test_extract_position_from_bracket_name():
@@ -55,3 +55,10 @@ def test_extract_position_fallback_patterns():
     assert extract_position_from_filename("示例候选人B-岗位庚开发工程师.pdf") == "岗位庚开发工程师"
     assert extract_position_from_filename("示例候选人C-岗位辛数据开发-示例本科-8年.pdf") == "岗位辛数据开发"
     assert extract_position_from_filename("示例候选人D-岗位壬软件工程师.pdf") == "岗位壬软件工程师"
+
+
+def test_merge_candidate_info_keeps_filename_position():
+    base = CandidateInfo(name="候选人甲", applied_position="岗位丙工程师（2026校招）")
+    enhanced = {"applied_position": "岗位丙工程师"}
+    merged = merge_candidate_info(base, enhanced)
+    assert merged.applied_position == "岗位丙工程师（2026校招）"

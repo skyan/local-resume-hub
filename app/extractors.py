@@ -306,7 +306,9 @@ def merge_candidate_info(base: CandidateInfo, enhanced: dict) -> CandidateInfo:
     base.education = choose(base.education, "education")
     base.years_experience = choose(base.years_experience, "years_experience")
     base.skills = choose(base.skills, "skills")
-    base.applied_position = choose(base.applied_position, "applied_position")
+    # Keep filename-derived position as source of truth unless it's missing/unknown.
+    if base.applied_position in {None, "", "未知岗位"}:
+        base.applied_position = choose(base.applied_position, "applied_position")
 
     score = 0
     for field in [base.name, base.phone, base.email, base.education, base.years_experience, base.skills]:
